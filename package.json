@@ -1,0 +1,31 @@
+{
+  "name": "challenge-searchmas",
+  "version": "1.0.0",
+  "description": "Microservicio Node.js/TypeScript (AWS Serverless) que sincroniza datos de una API externa a PostgreSQL y los expone vía endpoints con paginación, filtros y exportación a CSV.",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "node",
+    "typescript",
+    "serverless",
+    "aws",
+    "lambda",
+    "postgresql",
+    "prisma",
+    "sqs",
+    "csv"
+  ],
+  "author": "Noelia Giovannini",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  }
+}
