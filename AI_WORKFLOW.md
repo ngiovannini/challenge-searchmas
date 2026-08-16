@@ -25,3 +25,29 @@ Se pidió inicializar el proyecto con `npm init`, instalar TypeScript y configur
 - Se validó la config compilando un archivo de prueba temporal: `strict` rechaza
   accesos inseguros a `undefined`, y la salida compilada usa `commonjs`
   (`exports`/`require`), compatible con el runtime de Lambda.
+
+### T0.2 — Configurar docker-compose.yml con PostgreSQL (puerto y credenciales configurables)
+
+Se pidió un `docker-compose.yml` con PostgreSQL (imagen `postgres:16`),
+variables de entorno para credenciales, puerto expuesto y volumen persistente,
+más un `.env.example` con `DATABASE_URL` de plantilla para Prisma.
+Explícitamente fuera de alcance: instalar Prisma (queda para T0.3).
+
+- Se creó `docker-compose.yml` con el servicio `db` y un volumen nombrado
+  (`db_data`) montado en `/var/lib/postgresql/data` para persistencia entre
+  reinicios. `.env` ya estaba en `.gitignore` desde T0.1.
+- **Ajuste 1 — puerto fijo**: el puerto `5432` por defecto está ocupado por
+  otro proyecto en mi máquina de desarrollo. Se parametrizó en
+  `docker-compose.yml` (`"${DB_PORT:-5432}:5432"`) con `5432` como default,
+  para que cualquiera que clone el repo pueda ajustarlo a su entorno sin
+  tocar el archivo versionado.
+- **Ajuste 2 — credenciales hardcodeadas**: la primera versión dejó
+  `POSTGRES_USER`, `POSTGRES_PASSWORD` y `POSTGRES_DB` con valores fijos
+  directamente en `docker-compose.yml`. Es inconsistente con el criterio ya
+  aplicado al puerto (portabilidad entre entornos) y mala práctica aunque
+  sean credenciales de desarrollo. Se movieron las tres a variables de
+  entorno sin valor por defecto en el compose — si `.env` no las define, el
+  servicio no arranca con credenciales adivinadas en silencio.
+- `.env.example` documenta las 5 variables (`DB_PORT`, `POSTGRES_USER`,
+  `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`) sin comentarios
+  extensos — placeholders autoexplicativos.
