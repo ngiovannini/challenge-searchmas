@@ -9,7 +9,7 @@ Cada bloque depende del anterior.
 ## Bloque 0 — Setup del proyecto
 
 - [x] T0.1 Inicializar proyecto (`npm init`, TypeScript, `tsconfig.json`)
-- [ ] T0.2 Configurar `docker-compose.yml` con PostgreSQL
+- [x] T0.2 Configurar `docker-compose.yml` con PostgreSQL
 - [ ] T0.3 Inicializar Prisma, definir modelo `Post`, primera migración
 - [ ] T0.4 Configurar `serverless.yml` base + `serverless-offline`
 
