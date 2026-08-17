@@ -412,3 +412,29 @@ solo headers si no hay resultados. Explícitamente fuera de alcance:
   conteo incorrecto por saltos de línea dentro de campos citados (CSV
   válido, no un bug) — se corrigió el método de verificación, no el
   código. Scripts temporales, borrados después de verificar.
+
+### T3.2 — `exportCsvHandler.ts`
+
+Se pidió el handler de `GET /api/export-csv`: composition root a nivel de
+módulo (mismo patrón que los demás handlers), parsea `userId`/`search` de
+`queryStringParameters` con la misma validación que `getDataHandler`
+(`userId` no numérico → `400 Invalid query parameters`, sin llamar al use
+case), llama a `exportCsvUseCase.exportToCsv(...)` y devuelve `200` con
+`Content-Type: text/csv` y `Content-Disposition: attachment;
+filename="posts-export.csv"`. Con esto quedan implementados los 3 endpoints
+del challenge.
+
+- Sin filtros obligatorios, según la nota de interpretación de
+  03-export-csv.md: `userId`/`search` son opcionales, mismo criterio que
+  `/api/data`.
+- Se agregó la función `exportCsv` a `serverless.yml` (`GET
+/api/export-csv`), mismo criterio de `handler` apuntando a `dist/` que
+  las otras dos funciones.
+- Se validó de punta a punta con `npm run build` + `serverless offline`
+  real contra los 100 posts sincronizados: headers HTTP correctos
+  (`content-type: text/csv`, `content-disposition: attachment;
+filename="posts-export.csv"`), export completo (100 filas de datos),
+  export filtrado por `userId`+`search` (4 filas, mismo resultado que
+  T2.1/T3.1), `400` real en `userId=abc`, y CSV solo-headers cuando el
+  filtro no matchea nada. Se detuvo el servidor y se limpiaron los archivos
+  de prueba después de verificar.
