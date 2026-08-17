@@ -92,7 +92,7 @@ definir todavía la sección `functions:` (llega en T1-T3).
   en un proyecto de scratch aislado para confirmar si `serverless offline`
   funciona sin cuenta. No fue así: v4 exige login o license key incluso para
   uso 100% local (`✖ Error: You must sign in or use a license key with
-  Serverless Framework V.4...`), algo incompatible con este proyecto —que
+Serverless Framework V.4...`), algo incompatible con este proyecto —que
   nunca hace deploy real a AWS, todo el desarrollo es local con
   `serverless-offline`— y con un entorno no interactivo sin browser para
   completar el login. Se instaló en su lugar `serverless@3.40.0` —la última
@@ -108,18 +108,196 @@ definir todavía la sección `functions:` (llega en T1-T3).
   `useDotenv: true` + `provider.environment.DATABASE_URL: ${env:DATABASE_URL}`
   para que las Lambdas reciban la misma `DATABASE_URL` que usa Prisma
   localmente. Sin sección `functions:`, según lo pedido.
-- **Ajuste — caché de npm con permisos rotos**: la instalación falló varias
-  veces con `EACCES`/`EEXIST` al escribir en
-  `~/.npm/_cacache/content-v2/sha512/24/58/...` — ese directorio quedó con
-  dueño `root` (de un `sudo npm install` anterior, ajeno a este proyecto),
-  bloqueando la escritura al usuario normal. Se evitó tocar permisos del
-  sistema (`sudo chown`) y en su lugar se instaló usando un caché de npm
-  aislado (`npm install --cache <dir-temporal>`), sin efectos en el resto
-  del sistema.
-- Se corrigió también `.nvmrc`, que había quedado con el comando de shell
-  literal (`echo "20.20.2" > .nvmrc`) en vez del número de versión.
+- Se corrigió `.nvmrc`, que había quedado con el comando de shell literal
+  (`echo "20.20.2" > .nvmrc`) en vez del número de versión.
 - Se verificó `npx serverless offline`: levanta (`Starting Offline at stage
-  dev (us-east-1)`), se mantiene corriendo sin crashear ni pedir login, y
+dev (us-east-1)`), se mantiene corriendo sin crashear ni pedir login, y
   `npx serverless print` confirma que `DATABASE_URL` se resuelve
   correctamente desde `.env`. Sin `functions:` definidas no expone rutas
   HTTP todavía, como se esperaba.
+
+## Bloque 1 — Sincronización (sync)
+
+### T1.1 — `JsonPlaceholderClient`
+
+Se pidió el cliente HTTP puro en `src/infrastructure/http/JsonPlaceholderClient.ts`,
+con `getPosts()` tipado según la forma real de JSONPlaceholder, manejo de
+errores descriptivo (red caída, timeout, status no-2xx) y URL base
+configurable. Explícitamente fuera de alcance: `PostRepository` y
+`SyncDataUseCase` (T1.2 y T1.4).
+
+- Se usó el `fetch` global de Node 20 (disponible también en el runtime
+  `nodejs20.x` de Lambda) en vez de agregar `axios` como dependencia —no
+  hacía falta nada más que una llamada GET simple, y evita una dependencia
+  extra sin necesidad real.
+- URL base configurable vía `JSONPLACEHOLDER_BASE_URL` (env var) con
+  `https://jsonplaceholder.typicode.com` como constante de default —ninguna
+  de las dos queda hardcodeada en medio del método, y el constructor la
+  acepta como parámetro para tests que necesiten apuntar a otro host.
+- Timeout de 10s con `AbortSignal.timeout()` (nativo, sin dependencias) para
+  cubrir el caso de red colgada, no solo caída/status de error.
+- Errores de red y de status no-2xx se envuelven en un `Error` con mensaje
+  descriptivo (URL, causa) en vez de dejar propagar la excepción cruda de
+  `fetch` o un `Response` sin contexto.
+- Se validó contra la API real: 100 posts con la forma esperada
+  (`id`/`userId`/`title`/`body`), un 404 forzado (URL base inválida) y una
+  falla de red real (puerto sin nada escuchando) — ambos casos lanzan el
+  error descriptivo esperado. Se hizo con un script temporal, borrado
+  después de verificar.
+- Seguimiento: se agregó `JSONPLACEHOLDER_BASE_URL` (opcional) a `.env` y
+  `.env.example`, y a `serverless.yml` (`provider.environment`, con fallback
+  al mismo default que ya tiene el código) para que la variable llegue a las
+  Lambdas cuando T1.6 instancie el cliente dentro de un handler real.
+
+### T1.2 — `PostRepository`
+
+Se pidió el repositorio en `src/infrastructure/db/PostRepository.ts`:
+`PrismaClient` instanciado como singleton con el driver adapter
+(`@prisma/adapter-pg`, según el hallazgo documentado en T0.3), upsert por
+`externalId`, listado paginado con filtros combinables (`userId` + `search`
+sobre `title`, mismo criterio que 02-query-data.md) y un `findAll` sin
+paginar para reutilizar en T3.1. Explícitamente fuera de alcance:
+`SyncDataUseCase`, `GetDataUseCase`, `ExportCsvUseCase`.
+
+- Se creó `src/domain/Post.ts` con la entidad de dominio (`id`, `externalId`,
+  `userId`, `title`, `body`, `syncedAt`) para que `PostRepository` devuelva
+  ese tipo en vez del tipo generado por Prisma —cumple el pedido de "no
+  exponer detalles internos de Prisma hacia quien lo consume" sin necesitar
+  un mapeo manual, porque el objeto que devuelve Prisma ya es
+  estructuralmente compatible con la entidad de dominio.
+- El `where` de los filtros (`userId` + `search` con `contains`/
+  `mode: 'insensitive'`) se arma en un único helper privado
+  (`buildWhereClause`), usado tanto por `findPaginated` como por `findAll`
+  —mismo criterio, sin duplicarlo entre los dos métodos ni exponerlo hacia
+  afuera.
+- El singleton de `PrismaClient` vive a nivel de módulo (no de instancia de
+  clase): se crea una sola vez por contenedor de Lambda y se reutiliza en
+  invocaciones sucesivas del mismo contenedor (evita reabrir conexión en
+  cada invocación); el constructor de `PostRepository` acepta un
+  `PrismaClient` opcional para poder inyectar un mock en los tests de
+  T4.1-T4.3 sin tocar el singleton real.
+- Se validó contra la base real: upsert crea y luego actualiza (no duplica)
+  el mismo `externalId`; `findPaginated` con `userId` + `search` combinados
+  devuelve el `total` correcto y respeta `skip`/`take` entre páginas;
+  `findAll` con el mismo filtro devuelve todo sin paginar. Se hizo con un
+  script temporal, borrado después de verificar.
+
+### T1.3 — `SqsPublisher` (simulado)
+
+Se pidió el mecanismo que desacopla `POST /api/sync-data` (responde `202`
+de inmediato) del procesamiento real, simulando SQS sin cola real —la
+sugerencia del pedido era invocar directamente al handler consumidor de
+forma asíncrona. Explícitamente fuera de alcance: `SyncDataUseCase` y los
+handlers (T1.4-T1.6).
+
+- **Ajuste sobre la sugerencia**: invocar directamente al handler consumidor
+  no era viable todavía porque ese handler (`syncDataConsumerHandler`, T1.6)
+  no existe aún, y hacer que `infrastructure/queue` importe algo de
+  `handlers/` además invertiría la dirección de dependencias de la
+  arquitectura (los handlers llaman a application/infrastructure, no al
+  revés). En cambio, `SqsPublisher` recibe el consumer como una función
+  inyectada por constructor (`SyncJobConsumer`) —quien lo instancie (T1.4 en
+  adelante) decide qué función correr. Sigue siendo la opción más simple: un
+  `setImmediate` fire-and-forget, sin cola en memoria ni `EventEmitter`.
+- `publish(message)` no es `async`/esperado por quien lo llama —desacopla el
+  timing igual que lo haría SQS real, para que el handler HTTP pueda
+  responder `202` sin esperar el procesamiento.
+- Los errores que tire el consumer se capturan dentro de `publish` y se
+  loggean (`console.error`), en vez de dejarlos escapar como unhandled
+  rejection —dado que acá el consumer corre en el mismo proceso (a
+  diferencia de SQS real, donde correría en una invocación de Lambda
+  separada con su propio manejo de errores/DLQ).
+- Comentario en el código aclarando que esto simula SQS y que en producción
+  se reemplazaría por `@aws-sdk/client-sqs` (`SendMessageCommand`) con el
+  consumer disparado por el trigger real de SQS.
+- Se validó con un script temporal: `publish()` no bloquea (el código
+  posterior a la llamada corre antes que el consumer) y un consumer que
+  tira una excepción no genera un unhandled rejection —se captura y
+  loggea. Se borró después de verificar.
+
+**Nota**: el diseño de constructor con consumer inyectado se reemplazó por
+`subscribe()` al implementar T1.4 — ver esa sección para el detalle.
+
+### T1.4 — `SyncDataUseCase`
+
+Se pidió el use case que orquesta el flujo completo, dividido en dos
+responsabilidades según la spec: `trigger()` (genera `jobId`, publica a la
+cola, devuelve enseguida para el `202`) y `processSyncJob()` (lo que corre
+el consumer: trae posts, los transforma, hace upsert). Explícitamente fuera
+de alcance: `syncDataHandler`/`syncDataConsumerHandler` (T1.5-T1.6).
+
+- Las tres dependencias (`JsonPlaceholderClient`, `PostRepository`,
+  `SqsPublisher`) se inyectan por constructor, sin instanciarlas dentro del
+  use case —para mockearlas en T4.1.
+- **Nota de wiring**: inyectar el consumer por constructor de `SqsPublisher`
+  (diseño original de T1.3) generaba una referencia circular con
+  `SyncDataUseCase` (el consumer _es_ `useCase.processSyncJob`, pero
+  `useCase` no existe todavía cuando se construye `SqsPublisher`). La
+  solución inicial fue un `let` + closure, que funcionaba solo porque
+  `publish()` es asíncrono (`setImmediate`) —frágil y difícil de justificar
+  en una revisión de código. Se reemplazó por un método `subscribe(consumer)`
+  en `SqsPublisher`, que separa explícitamente "crear" de "conectar": ahora
+  `publish()` sin `subscribe()` previo lanza `SqsPublisher: no consumer
+subscribed` en vez de fallar en silencio, y el wiring queda lineal (crear
+  publisher → crear use case con ese publisher → `publisher.subscribe(...)`).
+  Se revalidó con un script temporal: el error explícito sin `subscribe()`,
+  y el flujo completo con el wiring nuevo (trigger → consumer → 100 posts
+  persistidos). Se borró después de verificar.
+- Si `getPosts()` o algún upsert fallan, `processSyncJob` loggea el error
+  con el `jobId` para poder correlacionarlo (`console.error`) y no
+  re-lanza —no tumba el proceso, sin reintentos automáticos, según la
+  spec. En éxito, loggea la cantidad de posts procesados
+  (`console.log`), tal como pide el paso "d" del flujo en la spec.
+- Se validó de punta a punta contra la API real y la base real: `trigger()`
+  devuelve el `jobId` de inmediato, el consumer corre después de forma
+  asíncrona y persiste los 100 posts de JSONPlaceholder; con un cliente HTTP
+  apuntando a un puerto sin nada escuchando, el error se loggea correlacionado
+  con su `jobId` y no genera unhandled rejection. Se hizo con un script
+  temporal, borrado después de verificar (los 100 posts sincronizados sí
+  quedaron en la base de desarrollo, útiles para las tareas de consulta/CSV).
+
+### T1.5 — `syncDataHandler.ts` (fusiona T1.6)
+
+Se pidió el handler HTTP de `POST /api/sync-data`: composition root a nivel
+de módulo (una sola vez por contenedor Lambda), el handler solo llama a
+`useCase.trigger()` y responde `202` con `{ message, jobId }`, manejo de
+errores según la convención de CLAUDE.md (`{ statusCode, message,
+timestamp }`, `500` si falla al encolar), y registrar la función en
+`serverless.yml` (`POST /api/sync-data`).
+
+- **T1.6 fusionada con T1.5, sin implementarse como tarea separada**: en
+  este diseño, `SqsPublisher.publish()` invoca directamente a
+  `processSyncJob` vía `subscribe()` (sin trigger real de SQS), así que no
+  hay un segundo handler Lambda que dispare el consumer —`processSyncJob`
+  en `SyncDataUseCase` ya cumple ese rol dentro del mismo proceso. Reflejado
+  en `PLAN.md` (T1.6 tachada con la nota del motivo).
+- Composition root a nivel de módulo: `JsonPlaceholderClient`,
+  `PostRepository`, `SqsPublisher` y `SyncDataUseCase` se instancian una
+  sola vez fuera de la función handler, y `publisher.subscribe(...)` se
+  llama ahí mismo —mismo criterio que el singleton de `PrismaClient` en
+  T1.2, para no reabrir nada en cada invocación dentro del mismo contenedor.
+- Se agregó `@types/aws-lambda` como devDependency (solo tipos, sin costo en
+  runtime) para tipar `APIGatewayProxyEvent`/`APIGatewayProxyResult` sin
+  salirse de "handlers nativos, sin framework HTTP" de CLAUDE.md.
+- **Ajuste — handler apuntando a `dist/`, no a `src/`**: `serverless-offline`
+  no transpila TypeScript por sí solo (no hay plugin tipo
+  `serverless-esbuild` instalado); si el `handler` en `serverless.yml`
+  apunta a `src/handlers/syncDataHandler.ts`, Node no puede requerirlo
+  directamente. Se apuntó a `dist/handlers/syncDataHandler.syncDataHandler`
+  (la salida de `npm run build`) —hace falta compilar antes de levantar
+  `serverless offline`, algo a documentar en el `README.md` de T5.1.
+- Se validó de punta a punta: `npm run build` + `npx serverless offline`,
+  `POST http://localhost:3000/dev/api/sync-data` real devuelve `202` con
+  `jobId` de inmediato (el log de "processed 100 posts successfully" del
+  consumer aparece después, en el mismo proceso, confirmando que la
+  respuesta no espera el procesamiento), y los 100 posts quedan persistidos
+  en la base.
+- El camino de error (`500`) también se forzó en vivo: se comentó
+  temporalmente `sqsPublisher.subscribe(...)` en el composition root, se
+  rebuildeó y se hizo el mismo `POST` real contra `serverless offline`. La
+  respuesta fue exactamente `{"statusCode":500,"message":"Failed to enqueue
+  sync job","timestamp":"2026-08-17T19:09:34.231Z"}` con status HTTP `500`,
+  y el log del servidor mostró la excepción real capturada por el `catch`
+  (`Error: SqsPublisher: no consumer subscribed`, la misma que agrega T1.3).
+  Se restauró el `subscribe()`, se rebuildeó de nuevo y se reconfirmó el
+  camino feliz (`202`) para dejar todo como estaba antes de la prueba.
