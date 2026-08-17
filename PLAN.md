@@ -29,7 +29,7 @@ Cada bloque depende del anterior.
 ## Bloque 2 — Consulta (query)
 
 - [x] T2.1 `GetDataUseCase`: paginación + filtros combinables (`userId`, `search`)
-- [ ] T2.2 `getDataHandler.ts`: parsea query params, devuelve JSON + metadata
+- [x] T2.2 `getDataHandler.ts`: parsea query params, devuelve JSON + metadata
 
 ## Bloque 3 — Exportación CSV
 

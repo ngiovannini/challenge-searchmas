@@ -341,3 +341,40 @@ fuera de alcance: `getDataHandler.ts` (T2.2).
   rango devolviendo `data: []` sin error, y un filtro sin matches
   devolviendo `total: 0`. Se hizo con un script temporal, borrado después
   de verificar.
+
+### T2.2 — `getDataHandler.ts`
+
+Se pidió el handler de `GET /api/data`: composition root a nivel de módulo
+(mismo patrón que `syncDataHandler`), parsea `queryStringParameters`
+(`page`, `limit`, `userId`, `search`), devuelve `400 Invalid query
+parameters` si `page`/`limit`/`userId` vienen presentes pero no son
+parseables como número —sin llamar al use case—, y si son válidos (o no
+vienen) llama a `GetDataUseCase.getData(...)` y devuelve `200` con el
+resultado tal cual. Manejo general de errores con el formato de CLAUDE.md.
+Explícitamente fuera de alcance: `exportCsvHandler.ts` (Bloque 3).
+
+- `userId` recibe la misma validación 400 que `page`/`limit`
+  (`Number(...)` y chequeo de `NaN`), en vez de dejarlo pasar sin validar
+  como en la primera versión. **Corrección**: la versión original dejaba pasar un
+  `userId` no numérico como `NaN` hasta Prisma, que terminaba tirando un
+  `500` (error de servidor) para lo que en realidad es un input inválido
+  del cliente —debía ser `400`, igual que `page`/`limit`. Se corrigió para
+  mantener consistencia entre los tres parámetros numéricos.
+- El mensaje del 400 pasó de `"Invalid pagination parameters"` a
+  `"Invalid query parameters"`, ya que ahora cubre `userId` además de la
+  paginación —el nombre anterior quedaba incompleto.
+- La validación de rangos/defaults (page ≤0, limit >100, etc.) no vive acá
+  —ya la resuelve `GetDataUseCase` (T2.1) recibiendo `number | undefined`;
+  este handler solo distingue "no es un número" (`400`, antes de llamar al
+  use case) de "es un número, aunque esté fuera de rango" (se lo pasa al
+  use case, que lo normaliza).
+- Se agregó la función `getData` a `serverless.yml` (`GET /api/data`,
+  mismo `handler` apuntando a `dist/` que `syncData`, por la misma razón
+  documentada en T1.5: `serverless-offline` no transpila TS).
+- Se validó de punta a punta con `npm run build` + `serverless offline`
+  real contra los 100 posts ya sincronizados: defaults (`page:1, limit:20,
+  total:100, totalPages:5`), filtros `userId`+`search` combinados (`200`,
+  resultado correcto), y los tres casos de `400` (`page=abc`, `limit=xyz`,
+  `userId=abc` —este último confirmado que pasó de `500` a `400`) con el
+  formato y mensaje nuevo. Se detuvo el servidor y se limpió el build
+  después de verificar.

@@ -20,3 +20,9 @@ functions:
       - http:
           method: post
           path: /api/sync-data
+  getData:
+    handler: dist/handlers/getDataHandler.getDataHandler
+    events:
+      - http:
+          method: get
+          path: /api/data
