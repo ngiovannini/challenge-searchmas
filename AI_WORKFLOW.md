@@ -78,3 +78,48 @@ Se pidió `prisma init`, definir el modelo `Post` (con `externalId` único para 
   `externalId` → delete) contra la base real, confirmando que la migración,
   el modelo y el cliente generado funcionan correctamente; se borró después
   de verificar.
+
+### T0.4 — Configurar serverless.yml base + serverless-offline
+
+Se pidió instalar Serverless Framework y `serverless-offline` como
+devDependencies, crear `serverless.yml` (provider AWS, runtime `nodejs20.x`,
+región, plugin `serverless-offline`, variables de entorno referenciando
+`.env`) y verificar que `npx serverless offline` levante sin errores, sin
+definir todavía la sección `functions:` (llega en T1-T3).
+
+- **Decisión de arquitectura — Serverless Framework v3 en vez de v4**: antes
+  de instalar, se probó Serverless Framework v4 (versión `latest`, `4.41.0`)
+  en un proyecto de scratch aislado para confirmar si `serverless offline`
+  funciona sin cuenta. No fue así: v4 exige login o license key incluso para
+  uso 100% local (`✖ Error: You must sign in or use a license key with
+  Serverless Framework V.4...`), algo incompatible con este proyecto —que
+  nunca hace deploy real a AWS, todo el desarrollo es local con
+  `serverless-offline`— y con un entorno no interactivo sin browser para
+  completar el login. Se instaló en su lugar `serverless@3.40.0` —la última
+  versión de la serie 3.x, totalmente open source y sin ese requisito— junto
+  con `serverless-offline@13.10.1` (la última versión de la 13.x, compatible
+  vía peerDependency con `serverless ^3.2.0`; la serie 14.x del plugin ya
+  requiere `serverless ^4`). Ambas versiones se fijaron exactas
+  (`--save-exact`, sin `^`) en vez de dejarlas abiertas a `latest`, dado que
+  v3 está en modo mantenimiento y no conviene que un `npm install` futuro
+  suba de mayor sin decisión explícita.
+- `serverless.yml`: `service: challenge-searchmas`, `provider.name: aws`,
+  `runtime: nodejs20.x`, `region: us-east-1`, plugin `serverless-offline`,
+  `useDotenv: true` + `provider.environment.DATABASE_URL: ${env:DATABASE_URL}`
+  para que las Lambdas reciban la misma `DATABASE_URL` que usa Prisma
+  localmente. Sin sección `functions:`, según lo pedido.
+- **Ajuste — caché de npm con permisos rotos**: la instalación falló varias
+  veces con `EACCES`/`EEXIST` al escribir en
+  `~/.npm/_cacache/content-v2/sha512/24/58/...` — ese directorio quedó con
+  dueño `root` (de un `sudo npm install` anterior, ajeno a este proyecto),
+  bloqueando la escritura al usuario normal. Se evitó tocar permisos del
+  sistema (`sudo chown`) y en su lugar se instaló usando un caché de npm
+  aislado (`npm install --cache <dir-temporal>`), sin efectos en el resto
+  del sistema.
+- Se corrigió también `.nvmrc`, que había quedado con el comando de shell
+  literal (`echo "20.20.2" > .nvmrc`) en vez del número de versión.
+- Se verificó `npx serverless offline`: levanta (`Starting Offline at stage
+  dev (us-east-1)`), se mantiene corriendo sin crashear ni pedir login, y
+  `npx serverless print` confirma que `DATABASE_URL` se resuelve
+  correctamente desde `.env`. Sin `functions:` definidas no expone rutas
+  HTTP todavía, como se esperaba.
