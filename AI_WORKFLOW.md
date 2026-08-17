@@ -438,3 +438,45 @@ filename="posts-export.csv"`), export completo (100 filas de datos),
   T2.1/T3.1), `400` real en `userId=abc`, y CSV solo-headers cuando el
   filtro no matchea nada. Se detuvo el servidor y se limpiaron los archivos
   de prueba después de verificar.
+
+## Bloque 4 — Tests
+
+### T4.1 — Tests de `SyncDataUseCase`
+
+Se pidió el primer archivo de tests del proyecto
+(`tests/application/SyncDataUseCase.test.ts`), con mocks manuales
+(`jest.fn()`) para las tres dependencias inyectadas, no `jest.mock()` de
+módulo completo. Jest/ts-jest todavía no estaban instalados —era la primera
+tarea del Bloque 4—, así que hubo que darles de alta.
+
+- **Setup de Jest**: se instalaron `jest`, `ts-jest`, `@types/jest`
+  (versiones `latest` reales y estables esta vez —`jest@30.4.2`,
+  `ts-jest@29.4.12`—, se chequeó `peerDependencies`/`engines` antes de
+  instalar dado el historial de sorpresas con `latest` en este proyecto).
+  Config generada con `npx ts-jest config:init` (el flujo actual
+  recomendado por la propia librería) en vez de armarla a mano.
+- **`tsconfig.test.json` separado del build**: los tests viven en
+  `tests/`, fuera de `src/`, y el `tsconfig.json` de producción tiene
+  `rootDir: "src"` / `include: ["src/**/*.ts"]` a propósito (decisión de
+  T0.1, pensada para el build de Lambda). Meter `tests/` en ese mismo
+  `include` haría que `tsc`/`npm run build` intentara compilar los tests
+  al `dist/` que se despliega —mismo criterio ya aplicado en T1.5 con
+  `prisma.config.ts` quedando fuera del build. Se creó `tsconfig.test.json`
+  (extiende el de producción, agrega `tests/**/*.ts` al `include`, con
+  `rootDir: "."` y `noEmit: true`) usado solo por `ts-jest` vía
+  `jest.config.js`; `tsc --noEmit` y `npm run build` se verificaron sin
+  cambios de comportamiento ni de contenido en `dist/`.
+- Mocks manuales tipados como `{ metodoUsado: jest.fn() } as unknown as
+  jest.Mocked<Clase>` —solo se stubean los métodos que `SyncDataUseCase`
+  realmente llama (`getPosts`, `upsertByExternalId`, `publish`), no todos
+  los de cada clase.
+- 4 casos, los 4 pedidos explícitamente: `trigger()` publica `{ jobId }` y
+  devuelve el mismo `jobId` sin depender de que el consumer corra;
+  `processSyncJob()` camino feliz hace upsert una vez por post con el
+  mapeo correcto (`id`→`externalId`); camino de error (`getPosts` rechaza)
+  no relanza y loggea con el `jobId` correlacionado (`console.error`
+  espiado); caso borde de array vacío no llama a `upsertByExternalId`.
+- No se testeó `JsonPlaceholderClient`/`PostRepository`/`SqsPublisher` en
+  sí mismos, según lo pedido —ya se validaron a mano contra servicios
+  reales en T1.1-T1.3.
+- `npx jest` corre los 4 tests en verde.
