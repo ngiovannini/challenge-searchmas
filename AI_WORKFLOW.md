@@ -144,3 +144,40 @@ configurable. Explícitamente fuera de alcance: `PostRepository` y
   falla de red real (puerto sin nada escuchando) — ambos casos lanzan el
   error descriptivo esperado. Se hizo con un script temporal, borrado
   después de verificar.
+- Seguimiento: se agregó `JSONPLACEHOLDER_BASE_URL` (opcional) a `.env` y
+  `.env.example`, y a `serverless.yml` (`provider.environment`, con fallback
+  al mismo default que ya tiene el código) para que la variable llegue a las
+  Lambdas cuando T1.6 instancie el cliente dentro de un handler real.
+
+### T1.2 — `PostRepository`
+
+Se pidió el repositorio en `src/infrastructure/db/PostRepository.ts`:
+`PrismaClient` instanciado como singleton con el driver adapter
+(`@prisma/adapter-pg`, según el hallazgo documentado en T0.3), upsert por
+`externalId`, listado paginado con filtros combinables (`userId` + `search`
+sobre `title`, mismo criterio que 02-query-data.md) y un `findAll` sin
+paginar para reutilizar en T3.1. Explícitamente fuera de alcance:
+`SyncDataUseCase`, `GetDataUseCase`, `ExportCsvUseCase`.
+
+- Se creó `src/domain/Post.ts` con la entidad de dominio (`id`, `externalId`,
+  `userId`, `title`, `body`, `syncedAt`) para que `PostRepository` devuelva
+  ese tipo en vez del tipo generado por Prisma —cumple el pedido de "no
+  exponer detalles internos de Prisma hacia quien lo consume" sin necesitar
+  un mapeo manual, porque el objeto que devuelve Prisma ya es
+  estructuralmente compatible con la entidad de dominio.
+- El `where` de los filtros (`userId` + `search` con `contains`/
+  `mode: 'insensitive'`) se arma en un único helper privado
+  (`buildWhereClause`), usado tanto por `findPaginated` como por `findAll`
+  —mismo criterio, sin duplicarlo entre los dos métodos ni exponerlo hacia
+  afuera.
+- El singleton de `PrismaClient` vive a nivel de módulo (no de instancia de
+  clase): se crea una sola vez por contenedor de Lambda y se reutiliza en
+  invocaciones sucesivas del mismo contenedor (evita reabrir conexión en
+  cada invocación); el constructor de `PostRepository` acepta un
+  `PrismaClient` opcional para poder inyectar un mock en los tests de
+  T4.1-T4.3 sin tocar el singleton real.
+- Se validó contra la base real: upsert crea y luego actualiza (no duplica)
+  el mismo `externalId`; `findPaginated` con `userId` + `search` combinados
+  devuelve el `total` correcto y respeta `skip`/`take` entre páginas;
+  `findAll` con el mismo filtro devuelve todo sin paginar. Se hizo con un
+  script temporal, borrado después de verificar.
