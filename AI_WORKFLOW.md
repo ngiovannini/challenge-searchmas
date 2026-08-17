@@ -181,3 +181,36 @@ paginar para reutilizar en T3.1. Explícitamente fuera de alcance:
   devuelve el `total` correcto y respeta `skip`/`take` entre páginas;
   `findAll` con el mismo filtro devuelve todo sin paginar. Se hizo con un
   script temporal, borrado después de verificar.
+
+### T1.3 — `SqsPublisher` (simulado)
+
+Se pidió el mecanismo que desacopla `POST /api/sync-data` (responde `202`
+de inmediato) del procesamiento real, simulando SQS sin cola real —la
+sugerencia del pedido era invocar directamente al handler consumidor de
+forma asíncrona. Explícitamente fuera de alcance: `SyncDataUseCase` y los
+handlers (T1.4-T1.6).
+
+- **Ajuste sobre la sugerencia**: invocar directamente al handler consumidor
+  no era viable todavía porque ese handler (`syncDataConsumerHandler`, T1.6)
+  no existe aún, y hacer que `infrastructure/queue` importe algo de
+  `handlers/` además invertiría la dirección de dependencias de la
+  arquitectura (los handlers llaman a application/infrastructure, no al
+  revés). En cambio, `SqsPublisher` recibe el consumer como una función
+  inyectada por constructor (`SyncJobConsumer`) —quien lo instancie (T1.4 en
+  adelante) decide qué función correr. Sigue siendo la opción más simple: un
+  `setImmediate` fire-and-forget, sin cola en memoria ni `EventEmitter`.
+- `publish(message)` no es `async`/esperado por quien lo llama —desacopla el
+  timing igual que lo haría SQS real, para que el handler HTTP pueda
+  responder `202` sin esperar el procesamiento.
+- Los errores que tire el consumer se capturan dentro de `publish` y se
+  loggean (`console.error`), en vez de dejarlos escapar como unhandled
+  rejection —dado que acá el consumer corre en el mismo proceso (a
+  diferencia de SQS real, donde correría en una invocación de Lambda
+  separada con su propio manejo de errores/DLQ).
+- Comentario en el código aclarando que esto simula SQS y que en producción
+  se reemplazaría por `@aws-sdk/client-sqs` (`SendMessageCommand`) con el
+  consumer disparado por el trigger real de SQS.
+- Se validó con un script temporal: `publish()` no bloquea (el código
+  posterior a la llamada corre antes que el consumer) y un consumer que
+  tira una excepción no genera un unhandled rejection —se captura y
+  loggea. Se borró después de verificar.

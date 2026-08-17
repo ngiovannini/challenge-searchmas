@@ -17,7 +17,7 @@ Cada bloque depende del anterior.
 
 - [x] T1.1 `JsonPlaceholderClient`: cliente HTTP para traer los posts
 - [x] T1.2 `PostRepository`: acceso a datos con Prisma (upsert por `externalId`)
-- [ ] T1.3 `SqsPublisher` (simulado): encola el trabajo de sync
+- [x] T1.3 `SqsPublisher` (simulado): encola el trabajo de sync
 - [ ] T1.4 `SyncDataUseCase`: orquesta el flujo (trigger → publica a la cola)
 - [ ] T1.5 `syncDataHandler.ts`: handler HTTP, responde `202 Accepted`
 - [ ] T1.6 `syncDataConsumerHandler.ts`: consume el mensaje, trae y guarda los datos
