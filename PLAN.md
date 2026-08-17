@@ -19,8 +19,12 @@ Cada bloque depende del anterior.
 - [x] T1.2 `PostRepository`: acceso a datos con Prisma (upsert por `externalId`)
 - [x] T1.3 `SqsPublisher` (simulado): encola el trabajo de sync
 - [x] T1.4 `SyncDataUseCase`: orquesta el flujo (trigger → publica a la cola)
-- [ ] T1.5 `syncDataHandler.ts`: handler HTTP, responde `202 Accepted`
-- [ ] T1.6 `syncDataConsumerHandler.ts`: consume el mensaje, trae y guarda los datos
+- [x] T1.5 `syncDataHandler.ts`: handler HTTP, responde `202 Accepted`
+- [-] ~~T1.6~~ `syncDataConsumerHandler.ts` — fusionada con T1.5: en este diseño
+  simulado, `SqsPublisher.publish()` invoca directamente
+  `SyncDataUseCase.processSyncJob()` vía `subscribe()` (sin trigger real de
+  SQS), así que no existe un segundo handler Lambda separado para el
+  consumer; `processSyncJob` cumple ese rol dentro del mismo proceso.
 
 ## Bloque 2 — Consulta (query)
 

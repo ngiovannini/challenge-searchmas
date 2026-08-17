@@ -255,3 +255,49 @@ subscribed` en vez de fallar en silencio, y el wiring queda lineal (crear
   con su `jobId` y no genera unhandled rejection. Se hizo con un script
   temporal, borrado después de verificar (los 100 posts sincronizados sí
   quedaron en la base de desarrollo, útiles para las tareas de consulta/CSV).
+
+### T1.5 — `syncDataHandler.ts` (fusiona T1.6)
+
+Se pidió el handler HTTP de `POST /api/sync-data`: composition root a nivel
+de módulo (una sola vez por contenedor Lambda), el handler solo llama a
+`useCase.trigger()` y responde `202` con `{ message, jobId }`, manejo de
+errores según la convención de CLAUDE.md (`{ statusCode, message,
+timestamp }`, `500` si falla al encolar), y registrar la función en
+`serverless.yml` (`POST /api/sync-data`).
+
+- **T1.6 fusionada con T1.5, sin implementarse como tarea separada**: en
+  este diseño, `SqsPublisher.publish()` invoca directamente a
+  `processSyncJob` vía `subscribe()` (sin trigger real de SQS), así que no
+  hay un segundo handler Lambda que dispare el consumer —`processSyncJob`
+  en `SyncDataUseCase` ya cumple ese rol dentro del mismo proceso. Reflejado
+  en `PLAN.md` (T1.6 tachada con la nota del motivo).
+- Composition root a nivel de módulo: `JsonPlaceholderClient`,
+  `PostRepository`, `SqsPublisher` y `SyncDataUseCase` se instancian una
+  sola vez fuera de la función handler, y `publisher.subscribe(...)` se
+  llama ahí mismo —mismo criterio que el singleton de `PrismaClient` en
+  T1.2, para no reabrir nada en cada invocación dentro del mismo contenedor.
+- Se agregó `@types/aws-lambda` como devDependency (solo tipos, sin costo en
+  runtime) para tipar `APIGatewayProxyEvent`/`APIGatewayProxyResult` sin
+  salirse de "handlers nativos, sin framework HTTP" de CLAUDE.md.
+- **Ajuste — handler apuntando a `dist/`, no a `src/`**: `serverless-offline`
+  no transpila TypeScript por sí solo (no hay plugin tipo
+  `serverless-esbuild` instalado); si el `handler` en `serverless.yml`
+  apunta a `src/handlers/syncDataHandler.ts`, Node no puede requerirlo
+  directamente. Se apuntó a `dist/handlers/syncDataHandler.syncDataHandler`
+  (la salida de `npm run build`) —hace falta compilar antes de levantar
+  `serverless offline`, algo a documentar en el `README.md` de T5.1.
+- Se validó de punta a punta: `npm run build` + `npx serverless offline`,
+  `POST http://localhost:3000/dev/api/sync-data` real devuelve `202` con
+  `jobId` de inmediato (el log de "processed 100 posts successfully" del
+  consumer aparece después, en el mismo proceso, confirmando que la
+  respuesta no espera el procesamiento), y los 100 posts quedan persistidos
+  en la base.
+- El camino de error (`500`) también se forzó en vivo: se comentó
+  temporalmente `sqsPublisher.subscribe(...)` en el composition root, se
+  rebuildeó y se hizo el mismo `POST` real contra `serverless offline`. La
+  respuesta fue exactamente `{"statusCode":500,"message":"Failed to enqueue
+  sync job","timestamp":"2026-08-17T19:09:34.231Z"}` con status HTTP `500`,
+  y el log del servidor mostró la excepción real capturada por el `catch`
+  (`Error: SqsPublisher: no consumer subscribed`, la misma que agrega T1.3).
+  Se restauró el `subscribe()`, se rebuildeó de nuevo y se reconfirmó el
+  camino feliz (`202`) para dejar todo como estaba antes de la prueba.

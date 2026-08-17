@@ -12,3 +12,11 @@ provider:
 
 plugins:
   - serverless-offline
+
+functions:
+  syncData:
+    handler: dist/handlers/syncDataHandler.syncDataHandler
+    events:
+      - http:
+          method: post
+          path: /api/sync-data

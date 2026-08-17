@@ -25,6 +25,7 @@
   "author": "Noelia Giovannini",
   "license": "ISC",
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
     "@types/node": "^20.19.43",
     "dotenv": "^17.4.2",
     "prisma": "^7.9.1",
