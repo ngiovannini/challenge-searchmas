@@ -214,3 +214,44 @@ handlers (T1.4-T1.6).
   posterior a la llamada corre antes que el consumer) y un consumer que
   tira una excepción no genera un unhandled rejection —se captura y
   loggea. Se borró después de verificar.
+
+**Nota**: el diseño de constructor con consumer inyectado se reemplazó por
+`subscribe()` al implementar T1.4 — ver esa sección para el detalle.
+
+### T1.4 — `SyncDataUseCase`
+
+Se pidió el use case que orquesta el flujo completo, dividido en dos
+responsabilidades según la spec: `trigger()` (genera `jobId`, publica a la
+cola, devuelve enseguida para el `202`) y `processSyncJob()` (lo que corre
+el consumer: trae posts, los transforma, hace upsert). Explícitamente fuera
+de alcance: `syncDataHandler`/`syncDataConsumerHandler` (T1.5-T1.6).
+
+- Las tres dependencias (`JsonPlaceholderClient`, `PostRepository`,
+  `SqsPublisher`) se inyectan por constructor, sin instanciarlas dentro del
+  use case —para mockearlas en T4.1.
+- **Nota de wiring**: inyectar el consumer por constructor de `SqsPublisher`
+  (diseño original de T1.3) generaba una referencia circular con
+  `SyncDataUseCase` (el consumer _es_ `useCase.processSyncJob`, pero
+  `useCase` no existe todavía cuando se construye `SqsPublisher`). La
+  solución inicial fue un `let` + closure, que funcionaba solo porque
+  `publish()` es asíncrono (`setImmediate`) —frágil y difícil de justificar
+  en una revisión de código. Se reemplazó por un método `subscribe(consumer)`
+  en `SqsPublisher`, que separa explícitamente "crear" de "conectar": ahora
+  `publish()` sin `subscribe()` previo lanza `SqsPublisher: no consumer
+subscribed` en vez de fallar en silencio, y el wiring queda lineal (crear
+  publisher → crear use case con ese publisher → `publisher.subscribe(...)`).
+  Se revalidó con un script temporal: el error explícito sin `subscribe()`,
+  y el flujo completo con el wiring nuevo (trigger → consumer → 100 posts
+  persistidos). Se borró después de verificar.
+- Si `getPosts()` o algún upsert fallan, `processSyncJob` loggea el error
+  con el `jobId` para poder correlacionarlo (`console.error`) y no
+  re-lanza —no tumba el proceso, sin reintentos automáticos, según la
+  spec. En éxito, loggea la cantidad de posts procesados
+  (`console.log`), tal como pide el paso "d" del flujo en la spec.
+- Se validó de punta a punta contra la API real y la base real: `trigger()`
+  devuelve el `jobId` de inmediato, el consumer corre después de forma
+  asíncrona y persiste los 100 posts de JSONPlaceholder; con un cliente HTTP
+  apuntando a un puerto sin nada escuchando, el error se loggea correlacionado
+  con su `jobId` y no genera unhandled rejection. Se hizo con un script
+  temporal, borrado después de verificar (los 100 posts sincronizados sí
+  quedaron en la base de desarrollo, útiles para las tareas de consulta/CSV).
