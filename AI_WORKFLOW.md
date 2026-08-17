@@ -480,3 +480,34 @@ tarea del Bloque 4—, así que hubo que darles de alta.
   sí mismos, según lo pedido —ya se validaron a mano contra servicios
   reales en T1.1-T1.3.
 - `npx jest` corre los 4 tests en verde.
+
+### T4.2 — Tests de `GetDataUseCase`
+
+Se pidió `tests/application/GetDataUseCase.test.ts`, mockeando
+`PostRepository.findPaginated` con `jest.fn()` (mismo patrón manual que
+T4.1), cubriendo las reglas de normalización ya documentadas en T2.1:
+defaults, `page`/`limit` inválidos, cap de `limit` en 100, `search` vacío
+tratado como filtro ausente, filtros combinados, cálculo de `skip`/`take`,
+y la forma exacta de la respuesta con `totalPages` redondeado hacia arriba.
+
+- **Bug propio detectado y corregido durante la escritura**: la primera
+  versión usaba una sola tabla `it.each` mezclando casos de `page` inválido
+  y `limit` inválido, reutilizando la misma columna `expectedSkip` para
+  ambos. Para los casos de `limit` inválido, el `skip` esperado real es
+  `0` (porque `page` no se pasó y cae a su default 1), pero la tabla tenía
+  `20` hardcodeado —error del test, no del código bajo prueba. Falló
+  reproduciblemente al correrlo (3 tests en rojo) y se corrigió separando
+  en dos `it.each` distintos, uno por campo, cada uno afirmando lo que
+  realmente corresponde.
+- No se testeó el armado del `where`/`buildWhereClause` en sí —eso es
+  responsabilidad de `PostRepository` (T1.2)—, solo que
+  `GetDataUseCase` le pase el `PostFilters`/`skip`/`take` correctos al
+  método mockeado.
+- Nota aparte (no accionable): la primera corrida de `npx jest` con ambos
+  archivos de test mostró un warning de Jest ("worker process failed to
+  exit gracefully") que no reapareció en corridas posteriores ni bajo
+  `--detectOpenHandles` —consistente con el cache en frío de `ts-jest` en
+  la primera compilación, no con un leak real de recursos (no hay
+  instancias reales de `PrismaClient`/`fetch` en estos tests, todo está
+  mockeado con `import type`).
+- `npx jest` corre los 16 tests acumulados (T4.1 + T4.2) en verde.
