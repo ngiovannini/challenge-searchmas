@@ -8,6 +8,7 @@ provider:
   region: us-east-1
   environment:
     DATABASE_URL: ${env:DATABASE_URL}
+    JSONPLACEHOLDER_BASE_URL: ${env:JSONPLACEHOLDER_BASE_URL, 'https://jsonplaceholder.typicode.com'}
 
 plugins:
   - serverless-offline

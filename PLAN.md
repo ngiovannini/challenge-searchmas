@@ -15,7 +15,7 @@ Cada bloque depende del anterior.
 
 ## Bloque 1 — Sincronización (sync)
 
-- [ ] T1.1 `JsonPlaceholderClient`: cliente HTTP para traer los posts
+- [x] T1.1 `JsonPlaceholderClient`: cliente HTTP para traer los posts
 - [ ] T1.2 `PostRepository`: acceso a datos con Prisma (upsert por `externalId`)
 - [ ] T1.3 `SqsPublisher` (simulado): encola el trabajo de sync
 - [ ] T1.4 `SyncDataUseCase`: orquesta el flujo (trigger → publica a la cola)

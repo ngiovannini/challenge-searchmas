@@ -92,7 +92,7 @@ definir todavía la sección `functions:` (llega en T1-T3).
   en un proyecto de scratch aislado para confirmar si `serverless offline`
   funciona sin cuenta. No fue así: v4 exige login o license key incluso para
   uso 100% local (`✖ Error: You must sign in or use a license key with
-  Serverless Framework V.4...`), algo incompatible con este proyecto —que
+Serverless Framework V.4...`), algo incompatible con este proyecto —que
   nunca hace deploy real a AWS, todo el desarrollo es local con
   `serverless-offline`— y con un entorno no interactivo sin browser para
   completar el login. Se instaló en su lugar `serverless@3.40.0` —la última
@@ -108,18 +108,39 @@ definir todavía la sección `functions:` (llega en T1-T3).
   `useDotenv: true` + `provider.environment.DATABASE_URL: ${env:DATABASE_URL}`
   para que las Lambdas reciban la misma `DATABASE_URL` que usa Prisma
   localmente. Sin sección `functions:`, según lo pedido.
-- **Ajuste — caché de npm con permisos rotos**: la instalación falló varias
-  veces con `EACCES`/`EEXIST` al escribir en
-  `~/.npm/_cacache/content-v2/sha512/24/58/...` — ese directorio quedó con
-  dueño `root` (de un `sudo npm install` anterior, ajeno a este proyecto),
-  bloqueando la escritura al usuario normal. Se evitó tocar permisos del
-  sistema (`sudo chown`) y en su lugar se instaló usando un caché de npm
-  aislado (`npm install --cache <dir-temporal>`), sin efectos en el resto
-  del sistema.
-- Se corrigió también `.nvmrc`, que había quedado con el comando de shell
-  literal (`echo "20.20.2" > .nvmrc`) en vez del número de versión.
+- Se corrigió `.nvmrc`, que había quedado con el comando de shell literal
+  (`echo "20.20.2" > .nvmrc`) en vez del número de versión.
 - Se verificó `npx serverless offline`: levanta (`Starting Offline at stage
-  dev (us-east-1)`), se mantiene corriendo sin crashear ni pedir login, y
+dev (us-east-1)`), se mantiene corriendo sin crashear ni pedir login, y
   `npx serverless print` confirma que `DATABASE_URL` se resuelve
   correctamente desde `.env`. Sin `functions:` definidas no expone rutas
   HTTP todavía, como se esperaba.
+
+## Bloque 1 — Sincronización (sync)
+
+### T1.1 — `JsonPlaceholderClient`
+
+Se pidió el cliente HTTP puro en `src/infrastructure/http/JsonPlaceholderClient.ts`,
+con `getPosts()` tipado según la forma real de JSONPlaceholder, manejo de
+errores descriptivo (red caída, timeout, status no-2xx) y URL base
+configurable. Explícitamente fuera de alcance: `PostRepository` y
+`SyncDataUseCase` (T1.2 y T1.4).
+
+- Se usó el `fetch` global de Node 20 (disponible también en el runtime
+  `nodejs20.x` de Lambda) en vez de agregar `axios` como dependencia —no
+  hacía falta nada más que una llamada GET simple, y evita una dependencia
+  extra sin necesidad real.
+- URL base configurable vía `JSONPLACEHOLDER_BASE_URL` (env var) con
+  `https://jsonplaceholder.typicode.com` como constante de default —ninguna
+  de las dos queda hardcodeada en medio del método, y el constructor la
+  acepta como parámetro para tests que necesiten apuntar a otro host.
+- Timeout de 10s con `AbortSignal.timeout()` (nativo, sin dependencias) para
+  cubrir el caso de red colgada, no solo caída/status de error.
+- Errores de red y de status no-2xx se envuelven en un `Error` con mensaje
+  descriptivo (URL, causa) en vez de dejar propagar la excepción cruda de
+  `fetch` o un `Response` sin contexto.
+- Se validó contra la API real: 100 posts con la forma esperada
+  (`id`/`userId`/`title`/`body`), un 404 forzado (URL base inválida) y una
+  falla de red real (puerto sin nada escuchando) — ambos casos lanzan el
+  error descriptivo esperado. Se hizo con un script temporal, borrado
+  después de verificar.
