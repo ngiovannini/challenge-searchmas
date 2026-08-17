@@ -301,3 +301,80 @@ timestamp }`, `500` si falla al encolar), y registrar la función en
   (`Error: SqsPublisher: no consumer subscribed`, la misma que agrega T1.3).
   Se restauró el `subscribe()`, se rebuildeó de nuevo y se reconfirmó el
   camino feliz (`202`) para dejar todo como estaba antes de la prueba.
+
+## Bloque 2 — Consulta (query)
+
+### T2.1 — `GetDataUseCase`
+
+Se pidió el use case de `GET /api/data`: recibe `PostRepository` inyectado,
+toma `page`/`limit`/`userId`/`search`, valida y normaliza según
+02-query-data.md, calcula `skip`/`take`, y devuelve
+`{ data, pagination: { page, limit, total, totalPages } }`. Explícitamente
+fuera de alcance: `getDataHandler.ts` (T2.2).
+
+- **Aparte explícito de la letra de la spec**: 02-query-data.md divide el
+  flujo en "1-2. el handler parsea y valida page/limit" y "3. el use case
+  arma la query" —es decir, ubica la validación de "page/limit son números
+  válidos" del lado del handler. El pedido de esta tarea, en cambio, puso
+  esa validación en `GetDataUseCase`. Se siguió el pedido de la tarea en vez
+  de la división literal de la spec, porque coincide mejor con la regla ya
+  establecida en CLAUDE.md ("los handlers no contienen lógica de negocio...
+  toda la lógica testeable vive en application/") y con la sección de
+  Testing ("testear los use cases mockeando repositorio... no hace falta
+  testear los handlers"): si la validación viviera en el handler, quedaría
+  fuera del alcance de los tests de T4.2. `getData()` nunca lanza por
+  input inválido —normaliza en silencio (`page`/`limit` no positivos o no
+  enteros caen al default, `limit` se cappea a 100, `search` vacío se trata
+  como filtro ausente)—, coherente con el criterio de la spec de no tratar
+  como error los casos de "filtro/página fuera de rango". La validación de
+  "`page`/`limit` no son números" (el 400 `Invalid pagination parameters`)
+  sigue siendo trabajo del handler en T2.2, porque ahí es donde llegan como
+  string crudo desde `queryStringParameters` —`GetDataUseCase` ya recibe
+  `number | undefined`, no strings.
+- El `where` combinable se arma reutilizando el mismo `PostFilters` de T1.2
+  (no se duplica el criterio de filtros).
+- Se validó contra los 100 posts reales ya sincronizados (T1.4/T1.5): page
+  por default, `limit` cappeado a 100, `page`/`limit` inválidos
+  (negativos, cero, no-enteros) cayendo al default, `search` vacío
+  devolviendo el total completo, filtros `userId`+`search` combinados (AND,
+  case-insensitive), `totalPages` calculado correctamente, página fuera de
+  rango devolviendo `data: []` sin error, y un filtro sin matches
+  devolviendo `total: 0`. Se hizo con un script temporal, borrado después
+  de verificar.
+
+### T2.2 — `getDataHandler.ts`
+
+Se pidió el handler de `GET /api/data`: composition root a nivel de módulo
+(mismo patrón que `syncDataHandler`), parsea `queryStringParameters`
+(`page`, `limit`, `userId`, `search`), devuelve `400 Invalid query
+parameters` si `page`/`limit`/`userId` vienen presentes pero no son
+parseables como número —sin llamar al use case—, y si son válidos (o no
+vienen) llama a `GetDataUseCase.getData(...)` y devuelve `200` con el
+resultado tal cual. Manejo general de errores con el formato de CLAUDE.md.
+Explícitamente fuera de alcance: `exportCsvHandler.ts` (Bloque 3).
+
+- `userId` recibe la misma validación 400 que `page`/`limit`
+  (`Number(...)` y chequeo de `NaN`), en vez de dejarlo pasar sin validar
+  como en la primera versión. **Corrección**: la versión original dejaba pasar un
+  `userId` no numérico como `NaN` hasta Prisma, que terminaba tirando un
+  `500` (error de servidor) para lo que en realidad es un input inválido
+  del cliente —debía ser `400`, igual que `page`/`limit`. Se corrigió para
+  mantener consistencia entre los tres parámetros numéricos.
+- El mensaje del 400 pasó de `"Invalid pagination parameters"` a
+  `"Invalid query parameters"`, ya que ahora cubre `userId` además de la
+  paginación —el nombre anterior quedaba incompleto.
+- La validación de rangos/defaults (page ≤0, limit >100, etc.) no vive acá
+  —ya la resuelve `GetDataUseCase` (T2.1) recibiendo `number | undefined`;
+  este handler solo distingue "no es un número" (`400`, antes de llamar al
+  use case) de "es un número, aunque esté fuera de rango" (se lo pasa al
+  use case, que lo normaliza).
+- Se agregó la función `getData` a `serverless.yml` (`GET /api/data`,
+  mismo `handler` apuntando a `dist/` que `syncData`, por la misma razón
+  documentada en T1.5: `serverless-offline` no transpila TS).
+- Se validó de punta a punta con `npm run build` + `serverless offline`
+  real contra los 100 posts ya sincronizados: defaults (`page:1, limit:20,
+  total:100, totalPages:5`), filtros `userId`+`search` combinados (`200`,
+  resultado correcto), y los tres casos de `400` (`page=abc`, `limit=xyz`,
+  `userId=abc` —este último confirmado que pasó de `500` a `400`) con el
+  formato y mensaje nuevo. Se detuvo el servidor y se limpió el build
+  después de verificar.
