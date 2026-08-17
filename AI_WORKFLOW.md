@@ -467,7 +467,7 @@ tarea del Bloque 4—, así que hubo que darles de alta.
   `jest.config.js`; `tsc --noEmit` y `npm run build` se verificaron sin
   cambios de comportamiento ni de contenido en `dist/`.
 - Mocks manuales tipados como `{ metodoUsado: jest.fn() } as unknown as
-  jest.Mocked<Clase>` —solo se stubean los métodos que `SyncDataUseCase`
+jest.Mocked<Clase>` —solo se stubean los métodos que `SyncDataUseCase`
   realmente llama (`getPosts`, `upsertByExternalId`, `publish`), no todos
   los de cada clase.
 - 4 casos, los 4 pedidos explícitamente: `trigger()` publica `{ jobId }` y
@@ -511,3 +511,28 @@ y la forma exacta de la respuesta con `totalPages` redondeado hacia arriba.
   instancias reales de `PrismaClient`/`fetch` en estos tests, todo está
   mockeado con `import type`).
 - `npx jest` corre los 16 tests acumulados (T4.1 + T4.2) en verde.
+
+### T4.3 — Tests de `ExportCsvUseCase`
+
+Se pidió `tests/application/ExportCsvUseCase.test.ts`, mockeando
+`PostRepository.findAll` con `jest.fn()` (mismo patrón manual que T4.1/T4.2).
+Con esto se completa el Bloque 4.
+
+- Antes de escribir la aserción de escapado RFC 4180, se confirmó
+  empíricamente el formato exacto que produce `@json2csv/plainjs` con un
+  script temporal (`title: 'Hello, world'` → `"Hello, world"`;
+  `body: 'A "quoted" body, with a comma'` →
+  `"A ""quoted"" body, with a comma"`, comillas internas duplicadas) en vez
+  de asumirlo — mismo criterio que en T3.1, donde ya se había visto que un
+  conteo de filas "a ojo" puede fallar por cómo el CSV cita contenido con
+  saltos de línea/comas. El test valida el output, no reimplementa el
+  escapado.
+- 4 casos: sin filtros (repositorio llamado con `{}`, CSV con header +
+  una fila por post mockeado); filtros `userId`+`search` pasados
+  correctamente al repositorio; array vacío → CSV solo con header, sin
+  tirar error; y el caso de escapado de comas/comillas.
+- No se testeó `PostRepository` en sí —ya validado en T1.2 y
+  T4.1/T4.2—, solo que `ExportCsvUseCase` le pase los filtros correctos.
+- `npx jest` corre los 20 tests acumulados (T4.1+T4.2+T4.3) en verde;
+  `tsc --noEmit` y `npm run build` confirmados sin cambios y sin archivos
+  de test filtrados a `dist/`.
