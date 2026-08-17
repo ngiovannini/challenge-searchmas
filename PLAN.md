@@ -33,7 +33,7 @@ Cada bloque depende del anterior.
 
 ## Bloque 3 — Exportación CSV
 
-- [ ] T3.1 `ExportCsvUseCase`: reutiliza el `where` de T2.1 (sin paginar), convierte a CSV
+- [x] T3.1 `ExportCsvUseCase`: reutiliza el `where` de T2.1 (sin paginar), convierte a CSV
 - [ ] T3.2 `exportCsvHandler.ts`: devuelve el archivo como descarga
 
 ## Bloque 4 — Tests

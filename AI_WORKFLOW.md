@@ -296,7 +296,7 @@ timestamp }`, `500` si falla al encolar), y registrar la función en
   temporalmente `sqsPublisher.subscribe(...)` en el composition root, se
   rebuildeó y se hizo el mismo `POST` real contra `serverless offline`. La
   respuesta fue exactamente `{"statusCode":500,"message":"Failed to enqueue
-  sync job","timestamp":"2026-08-17T19:09:34.231Z"}` con status HTTP `500`,
+sync job","timestamp":"2026-08-17T19:09:34.231Z"}` con status HTTP `500`,
   y el log del servidor mostró la excepción real capturada por el `catch`
   (`Error: SqsPublisher: no consumer subscribed`, la misma que agrega T1.3).
   Se restauró el `subscribe()`, se rebuildeó de nuevo y se reconfirmó el
@@ -373,8 +373,42 @@ Explícitamente fuera de alcance: `exportCsvHandler.ts` (Bloque 3).
   documentada en T1.5: `serverless-offline` no transpila TS).
 - Se validó de punta a punta con `npm run build` + `serverless offline`
   real contra los 100 posts ya sincronizados: defaults (`page:1, limit:20,
-  total:100, totalPages:5`), filtros `userId`+`search` combinados (`200`,
+total:100, totalPages:5`), filtros `userId`+`search` combinados (`200`,
   resultado correcto), y los tres casos de `400` (`page=abc`, `limit=xyz`,
   `userId=abc` —este último confirmado que pasó de `500` a `400`) con el
   formato y mensaje nuevo. Se detuvo el servidor y se limpió el build
   después de verificar.
+
+## Bloque 3 — Exportación CSV
+
+### T3.1 — `ExportCsvUseCase`
+
+Se pidió el use case de `GET /api/export-csv`: reutiliza el mismo
+`PostFilters` que `GetDataUseCase`/`PostRepository` (T1.2/T2.1, sin
+paginar), convierte el resultado a CSV con columnas
+`id,externalId,userId,title,body,syncedAt`, y devuelve un CSV válido con
+solo headers si no hay resultados. Explícitamente fuera de alcance:
+`exportCsvHandler.ts` (T3.2).
+
+- **Elección de librería — `@json2csv/plainjs` en vez de `json2csv`**:
+  CLAUDE.md sugiere `json2csv`, pero ese paquete sin scope tiene como
+  `latest` un alpha (`6.0.0-alpha.2`) — el proyecto se movió a paquetes con
+  scope (`@json2csv/*`) y el nombre viejo quedó sin release estable
+  reciente. Se usó `@json2csv/plainjs@7.0.8` (versión estable, API
+  sincrónica en memoria, suficiente para el volumen de este challenge).
+- Se usa `fields` explícito (las 6 columnas) al construir el `Parser`, en
+  vez de dejar que infiera las columnas de los datos —así el CSV mantiene
+  el header fijo aunque el array de posts esté vacío (caso borde de la
+  spec: sin resultados, CSV válido solo con headers).
+- No hizo falta lidiar con el escapado de comas/comillas/saltos de línea
+  dentro de `body` a mano —el `Parser` sigue RFC 4180 automáticamente
+  (comillas dobles y contenido multilínea correctamente citado); es
+  justamente la razón práctica para no reimplementar la serialización CSV
+  a mano.
+- Se validó contra los 100 posts reales sincronizados: export completo,
+  export filtrado (`userId`+`search`, mismo resultado que T2.1), CSV con
+  solo headers cuando el filtro no matchea nada, y `syncedAt` como ISO
+  string. El primer intento de contar filas con `split('\n')` dio un
+  conteo incorrecto por saltos de línea dentro de campos citados (CSV
+  válido, no un bug) — se corrigió el método de verificación, no el
+  código. Scripts temporales, borrados después de verificar.
