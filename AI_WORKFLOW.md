@@ -301,3 +301,43 @@ timestamp }`, `500` si falla al encolar), y registrar la función en
   (`Error: SqsPublisher: no consumer subscribed`, la misma que agrega T1.3).
   Se restauró el `subscribe()`, se rebuildeó de nuevo y se reconfirmó el
   camino feliz (`202`) para dejar todo como estaba antes de la prueba.
+
+## Bloque 2 — Consulta (query)
+
+### T2.1 — `GetDataUseCase`
+
+Se pidió el use case de `GET /api/data`: recibe `PostRepository` inyectado,
+toma `page`/`limit`/`userId`/`search`, valida y normaliza según
+02-query-data.md, calcula `skip`/`take`, y devuelve
+`{ data, pagination: { page, limit, total, totalPages } }`. Explícitamente
+fuera de alcance: `getDataHandler.ts` (T2.2).
+
+- **Aparte explícito de la letra de la spec**: 02-query-data.md divide el
+  flujo en "1-2. el handler parsea y valida page/limit" y "3. el use case
+  arma la query" —es decir, ubica la validación de "page/limit son números
+  válidos" del lado del handler. El pedido de esta tarea, en cambio, puso
+  esa validación en `GetDataUseCase`. Se siguió el pedido de la tarea en vez
+  de la división literal de la spec, porque coincide mejor con la regla ya
+  establecida en CLAUDE.md ("los handlers no contienen lógica de negocio...
+  toda la lógica testeable vive en application/") y con la sección de
+  Testing ("testear los use cases mockeando repositorio... no hace falta
+  testear los handlers"): si la validación viviera en el handler, quedaría
+  fuera del alcance de los tests de T4.2. `getData()` nunca lanza por
+  input inválido —normaliza en silencio (`page`/`limit` no positivos o no
+  enteros caen al default, `limit` se cappea a 100, `search` vacío se trata
+  como filtro ausente)—, coherente con el criterio de la spec de no tratar
+  como error los casos de "filtro/página fuera de rango". La validación de
+  "`page`/`limit` no son números" (el 400 `Invalid pagination parameters`)
+  sigue siendo trabajo del handler en T2.2, porque ahí es donde llegan como
+  string crudo desde `queryStringParameters` —`GetDataUseCase` ya recibe
+  `number | undefined`, no strings.
+- El `where` combinable se arma reutilizando el mismo `PostFilters` de T1.2
+  (no se duplica el criterio de filtros).
+- Se validó contra los 100 posts reales ya sincronizados (T1.4/T1.5): page
+  por default, `limit` cappeado a 100, `page`/`limit` inválidos
+  (negativos, cero, no-enteros) cayendo al default, `search` vacío
+  devolviendo el total completo, filtros `userId`+`search` combinados (AND,
+  case-insensitive), `totalPages` calculado correctamente, página fuera de
+  rango devolviendo `data: []` sin error, y un filtro sin matches
+  devolviendo `total: 0`. Se hizo con un script temporal, borrado después
+  de verificar.
