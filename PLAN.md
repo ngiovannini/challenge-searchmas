@@ -44,5 +44,5 @@ Cada bloque depende del anterior.
 
 ## Bloque 5 — Documentación y cierre
 
-- [ ] T5.1 `README.md` con instrucciones de instalación/ejecución
-- [ ] T5.2 `AI_WORKFLOW.md` — alimentar de forma incremental mientras se resuelven los bloques anteriores, no al final
+- [x] T5.1 `README.md` con instrucciones de instalación/ejecución
+- [x] T5.2 `AI_WORKFLOW.md` — alimentar de forma incremental mientras se resuelven los bloques anteriores, no al final
