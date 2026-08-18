@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [
     "node",
@@ -26,11 +26,14 @@
   "license": "ISC",
   "devDependencies": {
     "@types/aws-lambda": "^8.10.162",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.19.43",
     "dotenv": "^17.4.2",
+    "jest": "^30.4.2",
     "prisma": "^7.9.1",
     "serverless": "3.40.0",
     "serverless-offline": "13.10.1",
+    "ts-jest": "^29.4.12",
     "typescript": "^5.9.3"
   },
   "dependencies": {

@@ -38,9 +38,9 @@ Cada bloque depende del anterior.
 
 ## Bloque 4 — Tests
 
-- [ ] T4.1 Tests de `SyncDataUseCase` (mock de cliente HTTP y repositorio)
-- [ ] T4.2 Tests de `GetDataUseCase` (mock de repositorio)
-- [ ] T4.3 Tests de `ExportCsvUseCase`
+- [x] T4.1 Tests de `SyncDataUseCase` (mock de cliente HTTP y repositorio)
+- [x] T4.2 Tests de `GetDataUseCase` (mock de repositorio)
+- [x] T4.3 Tests de `ExportCsvUseCase`
 
 ## Bloque 5 — Documentación y cierre
 
