@@ -36,3 +36,22 @@ se crean las dependencias primero, y recién después se conectan, sin
 depender de ningún orden de ejecución implícito. Con el cambio, además,
 usar el publisher sin haber suscripto un consumer pasó a fallar con un
 error explícito, en vez de fallar en silencio.
+
+## CI (fuera del alcance original — agregado como mejora)
+
+No estaba pedido en la consigna del challenge, se agregó como mejora
+adicional: `.github/workflows/ci.yml`, disparado en cada `push` a `main` y
+en cada `pull_request`.
+
+Pasos: checkout → setup de Node (versión leída de `.nvmrc`, con cache de
+npm) → `npm ci` → `npx prisma generate` → `npm run typecheck` → `npm run
+build` → `npm test`. El orden importa: falla rápido en errores de tipos
+antes de gastar tiempo en build y tests, y `prisma generate` corre antes
+del build/typecheck porque el cliente generado es necesario para que
+compile.
+
+No corre contra una base de datos real (los tests son unitarios con mocks,
+según lo definido en el Bloque 4) — no hace falta levantar Postgres en el
+runner de CI para este alcance.
+
+Corriendo en verde en `main` y en los PRs del proyecto.
