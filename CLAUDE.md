@@ -24,10 +24,10 @@ paginación, filtros y exportación a CSV. Enfoque AWS Serverless.
 
 ## Arquitectura: capas
 
-domain/ → entidades y tipos
-application/ → casos de uso (lógica de negocio pura, testeable sin AWS)
-infrastructure/ → DB (Prisma), cliente HTTP externo, cola (SQS)
-handlers/ → funciones Lambda, "finas": solo traducen event ↔ response
+- domain/ → entidades y tipos
+- application/ → casos de uso (lógica de negocio pura, testeable sin AWS)
+- infrastructure/ → DB (Prisma), cliente HTTP externo, cola (SQS)
+- handlers/ → funciones Lambda, "finas": solo traducen event ↔ response
 
 **Regla clave**: los handlers no contienen lógica de negocio. Solo parsean el
 `event`, llaman al use case correspondiente, y formatean la respuesta. Toda la
@@ -85,11 +85,3 @@ Al generar código, priorizar:
 - Simplicidad sobre abstracciones innecesarias (el alcance es chico, no over-engineerizar)
 - Consistencia con las specs y estas convenciones por sobre "mejores prácticas" genéricas que no apliquen al contexto
 - Cuando sugieras algo que se aparte de una decisión ya tomada en una spec, señalarlo explícitamente en vez de aplicarlo silenciosamente
-
-### Registro en AI_WORKFLOW.md
-
-A medida que se completa cada tarea, registrar en `AI_WORKFLOW.md`:
-
-- Qué se le pidió a la IA (breve, no el prompt completo)
-- Si la IA propuso algo incorrecto, ineficiente o inseguro, y cómo se corrigió
-- No es necesario documentar tareas donde todo salió como se esperaba sin ajustes

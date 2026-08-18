@@ -34,10 +34,10 @@ Sin body requerido (o body opcional para futuros filtros, ej. `{ "resource": "po
 2. `syncDataHandler` recibe el request, genera un `jobId`, publica un mensaje a la cola (SQS simulado)
 3. Responde inmediatamente `202 Accepted` con el `jobId` — el cliente NO espera a que termine la sincronización real
 4. `syncDataConsumerHandler` (disparado por la cola) consume el mensaje:
-   a. Llama a `JsonPlaceholderClient.getPosts()`
-   b. Transforma cada post al modelo interno (`Post`)
-   c. Hace upsert en la base (por `externalId`, para evitar duplicados si se sincroniza más de una vez)
-   d. Loggea resultado (cantidad de registros procesados, errores si hubo)
+   - Llama a `JsonPlaceholderClient.getPosts()`
+   - Transforma cada post al modelo interno (`Post`)
+   - Hace upsert en la base (por `externalId`, para evitar duplicados si se sincroniza más de una vez)
+   - Loggea resultado (cantidad de registros procesados, errores si hubo)
 
 ## Modelo de datos (`Post`)
 
