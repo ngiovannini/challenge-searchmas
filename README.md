@@ -1,4 +1,4 @@
-# challenge-searchmas
+# Challenge SearchMas
 
 Microservicio Node.js/TypeScript que sincroniza datos desde una API externa
 (JSONPlaceholder), los persiste en PostgreSQL, y los expone vía endpoints
